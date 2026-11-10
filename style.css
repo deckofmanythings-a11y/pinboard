@@ -259,3 +259,4 @@ button.pstyle.on{background:#5a4a3c;border-color:#c9a77a}
 .pin-ico .spec{fill:#fff;opacity:.75}
 .pin-ico .pin-shadow{fill:#000;opacity:.45}
 #pinStyles{gap:2px;flex-wrap:nowrap}
+.pin-shadow.tack{opacity:.32}

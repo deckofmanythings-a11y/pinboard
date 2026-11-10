@@ -201,12 +201,12 @@ const PIN_BARREL = 'M-6.5,-5 C-4,-8 -3,-11 -3,-14 C-3,-17 -4.5,-19.5 -6,-21 L6,-
 const PIN_STYLES = ['tall', 'round'];
 const pinStyleOf = it => it.pin_style === 'round' ? 'round' : 'tall';
 function pinShapes(style, lean) {
-  if (style === 'round')   // dome-head map pin seen from just off top-down
-    return `<g class="pin-shadow" filter="url(#pbBlur)"><ellipse cx="5" cy="5" rx="9.5" ry="7.5"/></g>` +
+  if (style === 'round')   // thumbtack: flat dome pressed right against the cork, so only a thin tight shadow
+    return `<g class="pin-shadow tack" filter="url(#pbBlurTight)"><ellipse cx="1.4" cy="1.9" rx="10.2" ry="9.6"/></g>` +
       `<g class="pin-body" transform="rotate(${lean})">` +
-        `<circle class="pc" cy="-3.5" r="10"/><circle fill="url(#pbTop)" cy="-3.5" r="10"/>` +
-        `<circle cy="-3.5" r="9.6" fill="none" stroke="rgba(0,0,0,.3)" stroke-width=".8"/>` +
-        `<ellipse class="spec" cx="-3.4" cy="-7.4" rx="3.2" ry="2" transform="rotate(-25 -3.4 -7.4)"/>` +
+        `<circle class="pc" cy="-.8" r="10"/><circle fill="url(#pbTop)" cy="-.8" r="10"/>` +
+        `<circle cy="-.8" r="9.6" fill="none" stroke="rgba(0,0,0,.3)" stroke-width=".8"/>` +
+        `<ellipse class="spec" cx="-3.4" cy="-4.7" rx="3.2" ry="2" transform="rotate(-25 -3.4 -4.7)"/>` +
       `</g>`;
   // tall: wide flange against the cork, waisted barrel, smaller grip end toward the viewer
   return `<g class="pin-shadow" filter="url(#pbBlur)" transform="rotate(140) scale(.8,.62)"><path d="${PIN_BARREL}"/><ellipse cy="-22.5" rx="6.8" ry="5.2"/></g>` +
@@ -225,7 +225,7 @@ function pinSvg(id, style) {
   return `<svg class="pin-svg" width="1" height="1">${pinShapes(style, lean)}</svg>`;
 }
 const pinIcon = (style, color) =>
-  `<svg class="pin-ico" viewBox="-17 -27 32 34" style="--pc:${color}">${pinShapes(style, -28)}</svg>`;
+  `<svg class="pin-ico" viewBox="${style === 'round' ? '-15 -16 31 31' : '-16 -27 32 34'}" style="--pc:${color}">${pinShapes(style, -28)}</svg>`;
 
 /* ---------- pinholes: pulling a pin out leaves a hole in the cork ---------- */
 const holesEl = document.createElement('div');
@@ -572,7 +572,7 @@ function select(sel) {
 function swatch(color, on, attr, sq) {
   return `<button type="button" class="sw${on ? ' on' : ''}${sq ? ' sq' : ''}" style="background:${color}" ${attr}="${color}" title="${color}"></button>`;
 }
-const pinStyleBtns = (cur, color) => `<div class="grp">${PIN_STYLES.map(st => `<button type="button" class="pstyle${st === cur ? ' on' : ''}" data-pinstyle="${st}" title="${st === 'tall' ? 'Tall push pin' : 'Round pin'}">${pinIcon(st, color)}</button>`).join('')}</div>`;
+const pinStyleBtns = (cur, color) => `<div class="grp">${PIN_STYLES.map(st => `<button type="button" class="pstyle${st === cur ? ' on' : ''}" data-pinstyle="${st}" title="${st === 'tall' ? 'Tall push pin' : 'Thumbtack'}">${pinIcon(st, color)}</button>`).join('')}</div>`;
 function renderSelbar() {
   const bar = $('#selbar');
   const sel = S.sel;
@@ -1012,7 +1012,7 @@ function setTool(tool) {
 }
 function renderPinStylePicker() {
   $('#pinStyles').innerHTML = PIN_STYLES.map(st =>
-    `<button type="button" class="pstyle${st === S.pinStyle ? ' on' : ''}" data-newpin="${st}" title="New notes get a ${st === 'tall' ? 'tall push pin' : 'round pin'}">${pinIcon(st, PIN_COLORS[0])}</button>`).join('');
+    `<button type="button" class="pstyle${st === S.pinStyle ? ' on' : ''}" data-newpin="${st}" title="New notes get a ${st === 'tall' ? 'tall push pin' : 'thumbtack'}">${pinIcon(st, PIN_COLORS[0])}</button>`).join('');
 }
 function renderYarnPicker() {
   $('#yarnColors').innerHTML = YARN_COLORS.map(c => swatch(c, c === S.yarnColor, 'data-yarn')).join('');
