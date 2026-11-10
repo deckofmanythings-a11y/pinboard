@@ -260,3 +260,26 @@ button.pstyle.on{background:#5a4a3c;border-color:#c9a77a}
 .pin-ico .pin-shadow{fill:#000;opacity:.45}
 #pinStyles{gap:2px;flex-wrap:nowrap}
 .pin-shadow.tack{opacity:.32}
+
+/* logo button + board menu */
+button.brand{background:transparent;border:0;color:inherit;padding:4px 8px 4px 4px;margin-left:-4px;border-radius:8px;cursor:pointer}
+button.brand:hover,button.brand.open{background:#3a322c}
+.brand .caret{font-family:system-ui,sans-serif;font-size:11px;opacity:.6;margin-left:-2px}
+#boardMenu{position:fixed;left:10px;top:48px;z-index:60;min-width:230px;max-width:min(320px,calc(100vw - 20px));
+  max-height:calc(100vh - 70px);overflow:auto;padding:6px;border-radius:10px;background:#231e1a;color:var(--bar-ink);
+  border:1px solid #3d352f;box-shadow:0 12px 30px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:1px}
+#boardMenu[hidden]{display:none}
+#boardMenu .mi{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:7px;border:0;background:transparent;
+  color:inherit;font:inherit;font-size:14px;text-align:left;text-decoration:none;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#boardMenu .mi:hover,#boardMenu .mi:focus-visible{background:#3a322c;outline:none}
+#boardMenu .mi[hidden]{display:none}
+#boardMenu .mi-ico{width:16px;text-align:center;opacity:.75}
+#boardMenu .mi.board{display:block;padding-left:34px}
+#boardMenu .mi.cur{background:#3a2f26;position:relative}
+#boardMenu .mi.cur::before{content:'✓';position:absolute;left:12px;color:#c9a77a}
+#boardMenu .mi-sep{height:1px;background:#3d352f;margin:5px 4px}
+#boardMenu .mi-head{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#a3978a;padding:4px 10px 3px}
+#boardMenu .mi-new{display:flex;gap:6px;padding:4px 6px}
+#boardMenu .mi-new[hidden]{display:none}
+#boardMenu .mi-new input{flex:1;min-width:0;padding:6px 8px;border-radius:6px;border:1px solid #4a413a;background:#2f2924;color:inherit;font:inherit;font-size:14px}
+#boardMenu .mi-new .btn{padding:6px 10px;font-size:13px}

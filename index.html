@@ -7,12 +7,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Special+Elite&family=Permanent+Marker&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
 <header id="topbar">
-  <div class="brand"><span class="brand-pin"></span>Pinboard</div>
+  <button id="brandBtn" class="brand" type="button" aria-haspopup="menu" aria-expanded="false" title="Boards"><span class="brand-pin"></span>Pinboard<span class="caret">▾</span></button>
   <input id="boardTitle" maxlength="120" spellcheck="false" aria-label="Board title" hidden>
   <div class="spacer"></div>
   <div id="peers" aria-label="People on this board"></div>
@@ -73,6 +73,7 @@
 
 <div id="hint" hidden>Drag a <b>pin</b> onto another note to tie yarn · <b>Shift</b>+drag to select several · arrow keys nudge · double-click to write</div>
 
+<div id="boardMenu" role="menu" hidden></div>
 <div id="selbar" hidden></div>
 <div id="toast"></div>
 
@@ -114,6 +115,6 @@
 <input id="filePick" type="file" accept="image/*" multiple hidden>
 
 <script src="sb-client.bundle.js"></script>
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

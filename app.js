@@ -1276,6 +1276,53 @@ function showLanding() {
   setTimeout(() => $('#newBoardTitle').focus(), 50);
 }
 
+/* ---------- logo menu: Home, New board, boards you've opened ---------- */
+async function createBoard(title) {
+  const { data, error } = await sb.rpc('pb_create_board', { p_title: title });
+  if (error || !data) { toast('Couldn\'t create board: ' + (error?.message || 'unknown'), true); return false; }
+  location.href = './?b=' + data;
+  return true;
+}
+const menuEl = $('#boardMenu'), brandBtn = $('#brandBtn');
+function renderBoardMenu() {
+  const recent = store.get('pb_recent', []).filter(b => isUuid(b.id));
+  menuEl.innerHTML =
+    `<a class="mi" role="menuitem" href="./"><span class="mi-ico">⌂</span>Home</a>` +
+    `<button class="mi" role="menuitem" type="button" data-act="new"><span class="mi-ico">＋</span>New board</button>` +
+    `<form class="mi-new" hidden><input maxlength="120" placeholder="Name your board" aria-label="New board name"><button class="btn primary" type="submit">Create</button></form>` +
+    (recent.length ? `<div class="mi-sep"></div><div class="mi-head">Your boards</div>` : '');
+  for (const b of recent) {
+    const cur = b.id === boardId;
+    const a = document.createElement('a');
+    a.className = 'mi board' + (cur ? ' cur' : ''); a.setAttribute('role', 'menuitem');
+    a.href = './?b=' + b.id;
+    a.textContent = (cur && S.board?.title) || b.title || 'Untitled board';
+    if (cur) { a.title = 'You are here'; a.setAttribute('aria-current', 'page'); }
+    menuEl.appendChild(a);
+  }
+}
+function openBoardMenu(open) {
+  if (open) renderBoardMenu();
+  menuEl.hidden = !open;
+  brandBtn.setAttribute('aria-expanded', String(open));
+  brandBtn.classList.toggle('open', open);
+}
+brandBtn.addEventListener('click', () => openBoardMenu(menuEl.hidden));
+menuEl.addEventListener('click', e => {
+  const b = e.target.closest('[data-act="new"]'); if (!b) return;
+  const f = menuEl.querySelector('.mi-new');
+  b.hidden = true; f.hidden = false; f.querySelector('input').focus();
+});
+menuEl.addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button'); btn.disabled = true;
+  if (!await createBoard(e.target.querySelector('input').value)) btn.disabled = false;
+});
+document.addEventListener('pointerdown', e => {
+  if (!menuEl.hidden && !menuEl.contains(e.target) && !brandBtn.contains(e.target)) openBoardMenu(false);
+}, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menuEl.hidden) { openBoardMenu(false); brandBtn.focus(); } });
+
 /* ---------- boot ---------- */
 async function boot() {
   renderYarnPicker(); renderPinStylePicker();
