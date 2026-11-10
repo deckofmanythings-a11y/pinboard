@@ -63,6 +63,8 @@ const S = {
   channel: null,
   loaded: false,
   peers: {},
+  multi: new Set(),   // multi-selection of item ids (S.sel is null while this is in use)
+  tool: 'pan',        // 'pan' | 'select' — what dragging empty cork does
 };
 const savedMe = store.get('pb_me', null);
 const me = {
@@ -100,6 +102,7 @@ function viewCenterWorld() {
 }
 function applyView() {
   world.style.transform = `translate(${S.view.x}px,${S.view.y}px) scale(${S.view.s})`;
+  if (S.sel?.type === 'string') schedule(null);   // resize yarn-end handles for the new zoom
   positionSelbar();
 }
 function zoomAt(cx, cy, ns) {
@@ -164,7 +167,7 @@ function renderItem(it) {
   el.style.transform = `rotate(${it.rot || 0}deg)`;
   el.style.zIndex = it.z || 0;
   el.style.setProperty('--paper', safeColor(it.color, it.kind === 'card' ? CARD_COLORS[0] : POSTIT_COLORS[0]));
-  el.classList.toggle('sel', S.sel?.type === 'item' && S.sel.id === it.id);
+  el.classList.toggle('sel', isSelected(it.id));
   for (const f of el.querySelectorAll('[data-field]')) {
     const field = f.dataset.field;
     if (S.editing && S.editing.id === it.id && S.editing.field === field) continue;
@@ -195,17 +198,37 @@ function removeItemEl(id) {
 
 function renderStrings() {
   const out = [];
+  const rt = S.drag?.type === 'retie' ? S.drag : null;
+  let ends = '';
   for (const s of S.strings.values()) {
     const a = S.items.get(s.from_item), b = S.items.get(s.to_item);
     if (!a || !b) continue;
-    out.push(yarnGroup(s.id, pinPos(a), pinPos(b), safeColor(s.color, YARN_COLORS[0]),
-      S.sel?.type === 'string' && S.sel.id === s.id));
+    let pa = pinPos(a), pb = pinPos(b);
+    if (rt && rt.sid === s.id) { if (rt.end === 'from') pa = rt.to; else pb = rt.to; }
+    const sel = S.sel?.type === 'string' && S.sel.id === s.id;
+    out.push(yarnGroup(s.id, pa, pb, safeColor(s.color, YARN_COLORS[0]), sel, !!(rt && rt.sid === s.id)));
+    if (sel && !rt) {
+      // grab handles a little way along the strand from each pin: drag one to re-tie that end
+      const hr = Math.max(9, 7 / S.view.s).toFixed(1);   // stays finger-sized when zoomed out
+      const ha = alongYarn(pa, pb, 22 + hr * 1.4), hb = alongYarn(pb, pa, 22 + hr * 1.4);
+      ends += `<circle class="y-end" data-sid="${s.id}" data-end="from" cx="${ha.x.toFixed(1)}" cy="${ha.y.toFixed(1)}" r="${hr}" stroke-width="${(hr / 4.5).toFixed(1)}"><title>Drag to re-tie this end</title></circle>` +
+              `<circle class="y-end" data-sid="${s.id}" data-end="to" cx="${hb.x.toFixed(1)}" cy="${hb.y.toFixed(1)}" r="${hr}" stroke-width="${(hr / 4.5).toFixed(1)}"><title>Drag to re-tie this end</title></circle>`;
+    }
   }
+  out.push(ends);
   if (S.drag?.type === 'yarn') {
     const a = S.items.get(S.drag.from);
     if (a) out.push(yarnGroup('', pinPos(a), S.drag.to, S.yarnColor, false, true));
   }
   yarnSvg.innerHTML = out.join('');
+}
+/** Point roughly `len` px along the sagging strand from p toward q (matches yarnD's curve). */
+function alongYarn(p, q, len) {
+  const dist = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+  const drop = Math.min(70, 8 + dist * 0.09);
+  const c = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 + drop };
+  const t = Math.min(0.45, len / dist), u = 1 - t;
+  return { x: u * u * p.x + 2 * u * t * c.x + t * t * q.x, y: u * u * p.y + 2 * u * t * c.y + t * t * q.y };
 }
 function yarnGroup(id, a, b, color, sel, temp) {
   const d = yarnD(a, b);
@@ -320,6 +343,7 @@ function deleteItem(id) {
   for (const [sid, s] of S.strings) if (s.from_item === id || s.to_item === id) S.strings.delete(sid);
   removeItemEl(id);
   if (S.sel?.id === id) select(null);
+  if (S.multi.delete(id)) renderSelbar();
   renderStrings();
   bcast('item_del', { id });
   clearTimeout(saveTimers.get(id)); saveTimers.delete(id);
@@ -359,6 +383,23 @@ function recolorString(id, color) {
   saveString(n);
   S.sel = { type: 'string', id: n.id };
   renderStrings(); renderSelbar();
+}
+
+/** Move one end of a strand to a different item (strands are immutable server-side: replace it). */
+function retieString(id, end, target) {
+  const s = S.strings.get(id); if (!s) return;
+  const from = end === 'from' ? target : s.from_item, to = end === 'to' ? target : s.to_item;
+  if (from === to || (from === s.from_item && to === s.to_item)) return;
+  for (const o of S.strings.values())
+    if (o.id !== id && ((o.from_item === from && o.to_item === to) || (o.from_item === to && o.to_item === from))) { toast('Already tied together'); return; }
+  S.strings.delete(id);
+  bcast('string_del', { id });
+  enqueue(id, () => rpcOrThrow('pb_delete_string', { p_board: boardId, p_id: id }));
+  const n = { id: uuid(), from_item: from, to_item: to, color: s.color };
+  S.strings.set(n.id, n);
+  bcast('string', { string: n });
+  saveString(n);
+  S.sel = { type: 'string', id: n.id };
 }
 
 /* ---------- photos ---------- */
@@ -419,7 +460,28 @@ $('#filePick').addEventListener('change', e => {
 });
 
 /* ---------- selection + selbar ---------- */
+function isSelected(id) { return S.multi.has(id) || (S.sel?.type === 'item' && S.sel.id === id); }
+/** Ids of every selected item (single or multi). */
+function selIds() { return S.multi.size ? [...S.multi].filter(id => S.items.has(id)) : S.sel?.type === 'item' ? [S.sel.id] : []; }
+function clearMulti() {
+  if (!S.multi.size) return;
+  const old = [...S.multi]; S.multi = new Set();
+  for (const id of old) { const it = S.items.get(id); if (it) renderItem(it); }
+}
+/** Select a set of items; one id collapses to a normal single selection. */
+function selectItems(ids) {
+  ids = [...new Set(ids)].filter(id => S.items.has(id));
+  if (ids.length <= 1) { clearMulti(); select(ids.length ? { type: 'item', id: ids[0] } : null); return; }
+  const prev = S.sel; S.sel = null;
+  if (prev?.type === 'item') { const it = S.items.get(prev.id); if (it) renderItem(it); }
+  if (prev?.type === 'string') renderStrings();
+  clearMulti();
+  S.multi = new Set(ids);
+  for (const id of ids) renderItem(S.items.get(id));
+  renderSelbar();
+}
 function select(sel) {
+  clearMulti();
   const prev = S.sel;
   S.sel = sel;
   if (prev?.type === 'item') { const it = S.items.get(prev.id); if (it) renderItem(it); }
@@ -433,6 +495,13 @@ function swatch(color, on, attr, sq) {
 function renderSelbar() {
   const bar = $('#selbar');
   const sel = S.sel;
+  if (S.multi.size) {
+    bar.innerHTML = `<span class="count">${S.multi.size} items</span><div class="div"></div>` +
+      `<button class="ic" data-act="mrotl" title="Rotate each left">↺</button><button class="ic" data-act="mrotr" title="Rotate each right">↻</button>` +
+      `<button class="ic" data-act="mback" title="Send to back">⤓</button>` +
+      `<button class="ic danger" data-act="mdel" title="Delete all (Del)">🗑</button>`;
+    bar.hidden = false; positionSelbar(); return;
+  }
   if (!sel || (sel.type === 'item' && !S.items.has(sel.id)) || (sel.type === 'string' && !S.strings.has(sel.id))) {
     bar.hidden = true; return;
   }
@@ -462,9 +531,17 @@ function renderSelbar() {
 }
 function positionSelbar() {
   const bar = $('#selbar');
-  if (bar.hidden || !S.sel) return;
+  if (bar.hidden || (!S.sel && !S.multi.size)) return;
   let r;
-  if (S.sel.type === 'item') r = document.getElementById('it-' + S.sel.id)?.getBoundingClientRect();
+  if (S.multi.size) {
+    let l = Infinity, t = Infinity, rr = -Infinity, b = -Infinity;
+    for (const id of S.multi) {
+      const q = document.getElementById('it-' + id)?.getBoundingClientRect(); if (!q) continue;
+      l = Math.min(l, q.left); t = Math.min(t, q.top); rr = Math.max(rr, q.right); b = Math.max(b, q.bottom);
+    }
+    if (l === Infinity) return;
+    r = { left: l, top: t, right: rr, bottom: b, width: rr - l, height: b - t };
+  } else if (S.sel.type === 'item') r = document.getElementById('it-' + S.sel.id)?.getBoundingClientRect();
   else r = yarnSvg.querySelector(`[data-sid="${S.sel.id}"] .y-main`)?.getBoundingClientRect();
   if (!r) return;
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
@@ -475,7 +552,23 @@ function positionSelbar() {
 }
 $('#selbar').addEventListener('pointerdown', e => e.stopPropagation());
 $('#selbar').addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b || !S.sel) return;
+  const b = e.target.closest('button'); if (!b) return;
+  if (S.multi.size) {
+    const ids = selIds();
+    if (b.dataset.act === 'mdel') { ids.forEach(deleteItem); select(null); return; }
+    let mn = Infinity; for (const o of S.items.values()) mn = Math.min(mn, o.z || 0);
+    for (const id of ids) {
+      const it = S.items.get(id);
+      if (b.dataset.act === 'mrotl') it.rot = Math.round(((it.rot || 0) - 4) * 10) / 10;
+      else if (b.dataset.act === 'mrotr') it.rot = Math.round(((it.rot || 0) + 4) * 10) / 10;
+      else if (b.dataset.act === 'mback') it.z = --mn;
+      else return;
+      renderItem(it); commit(it);
+    }
+    renderStrings(); positionSelbar();
+    return;
+  }
+  if (!S.sel) return;
   if (S.sel.type === 'string') {
     if (b.dataset.ycolor) recolorString(S.sel.id, b.dataset.ycolor);
     if (b.dataset.act === 'delstr') deleteString(S.sel.id);
@@ -560,26 +653,67 @@ viewport.addEventListener('pointerdown', e => {
     viewport.setPointerCapture(e.pointerId);
     return;
   }
+  const end = t.closest('.y-end');
+  if (end && S.strings.has(end.dataset.sid)) {
+    const st = S.strings.get(end.dataset.sid);
+    S.drag = { type: 'retie', sid: st.id, end: end.dataset.end, fixed: end.dataset.end === 'from' ? st.to_item : st.from_item, to: w, moved: false };
+    viewport.setPointerCapture(e.pointerId);
+    renderStrings();
+    return;
+  }
   const yarn = t.closest('.yarn');
   if (yarn && yarn.dataset.sid) { endEdit(); select({ type: 'string', id: yarn.dataset.sid }); return; }
 
+  const additive = e.shiftKey || e.ctrlKey || e.metaKey;
   const itemEl = t.closest('.item');
   if (itemEl) {
     const it = S.items.get(itemEl.dataset.id); if (!it) return;
     if (S.editing && S.editing.id !== it.id) endEdit();
-    if (!(S.sel?.type === 'item' && S.sel.id === it.id)) select({ type: 'item', id: it.id });
-    const top = maxZ(), z0 = it.z;
-    if ((it.z || 0) < top || [...S.items.values()].filter(o => o.z === top).length > 1) it.z = top + 1;
-    if (t.closest('.rs')) S.drag = { type: 'resize', id: it.id, w0: it.w, h0: it.h, sx: w.x, sy: w.y, moved: false };
-    else S.drag = { type: 'move', id: it.id, ox: it.x, oy: it.y, sx: w.x, sy: w.y, cx: e.clientX, cy: e.clientY, moved: false, zBumped: it.z !== z0 };
+    if (additive) {                       // shift/ctrl-click toggles it in the selection
+      const ids = new Set(selIds());
+      if (ids.has(it.id)) { ids.delete(it.id); selectItems([...ids]); return; }
+      ids.add(it.id); selectItems([...ids]);
+    } else if (!isSelected(it.id)) select({ type: 'item', id: it.id });
+    if (t.closest('.rs') && !S.multi.size) {
+      S.drag = { type: 'resize', id: it.id, w0: it.w, h0: it.h, sx: w.x, sy: w.y, moved: false };
+    } else {
+      // move everything selected; the grabbed item comes to the front
+      const top = maxZ(), z0 = it.z;
+      if ((it.z || 0) < top || [...S.items.values()].filter(o => o.z === top).length > 1) it.z = top + 1;
+      const ids = selIds().includes(it.id) ? selIds() : [it.id];
+      const orig = new Map(ids.map(id => { const o = S.items.get(id); return [id, { x: o.x, y: o.y }]; }));
+      S.drag = { type: 'move', id: it.id, ids, orig, sx: w.x, sy: w.y, cx: e.clientX, cy: e.clientY, moved: false, zBumped: it.z !== z0 };
+    }
     renderItem(it);
     viewport.setPointerCapture(e.pointerId);
     return;
   }
   endEdit();
+  if (additive || S.tool === 'select') {   // rubber-band selection on empty cork
+    S.drag = { type: 'box', sx: w.x, sy: w.y, x: w.x, y: w.y, add: additive ? selIds() : [] };
+    if (!additive) select(null);
+    viewport.setPointerCapture(e.pointerId);
+    return;
+  }
   select(null);
   startPan(e);
 });
+
+const marquee = document.createElement('div');
+marquee.id = 'marquee'; marquee.hidden = true;
+world.appendChild(marquee);
+function boxRect(d) {
+  return { x0: Math.min(d.sx, d.x), y0: Math.min(d.sy, d.y), x1: Math.max(d.sx, d.x), y1: Math.max(d.sy, d.y) };
+}
+function drawMarquee(d) {
+  const r = boxRect(d);
+  marquee.hidden = false;
+  Object.assign(marquee.style, { left: r.x0 + 'px', top: r.y0 + 'px', width: (r.x1 - r.x0) + 'px', height: (r.y1 - r.y0) + 'px', borderWidth: (1.5 / S.view.s) + 'px' });
+}
+function itemsInBox(d) {
+  const r = boxRect(d);
+  return [...S.items.values()].filter(it => it.x < r.x1 && it.x + it.w > r.x0 && it.y < r.y1 && it.y + it.h > r.y0).map(it => it.id);
+}
 
 function startPan(e) {
   S.drag = { type: 'pan', sx: e.clientX, sy: e.clientY, vx: S.view.x, vy: S.view.y };
@@ -618,11 +752,19 @@ viewport.addEventListener('pointermove', e => {
     case 'move': {
       if (!d.moved && Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 3) return;
       d.moved = true;
-      const it = S.items.get(d.id); if (!it) return;
-      it.x = clamp(Math.round(d.ox + w.x - d.sx), -it.w / 2, WORLD_W - it.w / 2);
-      it.y = clamp(Math.round(d.oy + w.y - d.sy), -it.h / 4, WORLD_H - it.h / 2);
-      schedule(it.id); commitLive(it); break;
+      const dx = w.x - d.sx, dy = w.y - d.sy;
+      for (const id of d.ids) {
+        const it = S.items.get(id), o = d.orig.get(id); if (!it || !o) continue;
+        it.x = clamp(Math.round(o.x + dx), -it.w / 2, WORLD_W - it.w / 2);
+        it.y = clamp(Math.round(o.y + dy), -it.h / 4, WORLD_H - it.h / 2);
+        schedule(it.id); commitLive(it);
+      }
+      break;
     }
+    case 'box':
+      d.x = w.x; d.y = w.y; drawMarquee(d); break;
+    case 'retie':
+      d.moved = true; d.to = w; schedule(null); break;
     case 'resize': {
       d.moved = true;
       const it = S.items.get(d.id); if (!it) return;
@@ -642,8 +784,20 @@ function endPointer(e) {
   if (d.type === 'pinch') { if (pointers.size === 0) S.drag = null; return; }
   S.drag = null;
   viewport.classList.remove('panning');
-  if ((d.type === 'move' || d.type === 'resize') && d.moved) {
+  if (d.type === 'move' && d.moved) {
+    for (const id of d.ids) { const it = S.items.get(id); if (it) { commit(it); renderItem(it); } }
+    renderStrings();
+  } else if (d.type === 'resize' && d.moved) {
     const it = S.items.get(d.id); if (it) { commit(it); renderItem(it); renderStrings(); }
+  } else if (d.type === 'box') {
+    marquee.hidden = true;
+    selectItems([...d.add, ...itemsInBox(d)]);
+  } else if (d.type === 'retie') {
+    if (d.moved && e.type === 'pointerup') {
+      const target = hitItemAt(e.clientX, e.clientY, d.fixed);
+      if (target) retieString(d.sid, d.end, target);
+    }
+    renderStrings(); renderSelbar();
   } else if (d.type === 'move' && d.zBumped) {
     const it = S.items.get(d.id); if (it) commit(it);  // brought to front
   } else if (d.type === 'yarn') {
@@ -710,10 +864,28 @@ document.addEventListener('paste', e => {
 
 document.addEventListener('keydown', e => {
   if (!S.loaded || S.editing || e.target.closest?.('input,textarea,[contenteditable]')) return;
-  if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel) {
+  const ids = selIds();
+  if ((e.key === 'Delete' || e.key === 'Backspace') && (S.sel || ids.length)) {
     e.preventDefault();
-    if (S.sel.type === 'item') deleteItem(S.sel.id); else deleteString(S.sel.id);
+    if (S.sel?.type === 'string') deleteString(S.sel.id);
+    else { ids.forEach(deleteItem); select(null); }
   } else if (e.key === 'Escape') select(null);
+  else if (e.key.startsWith('Arrow') && ids.length) {   // nudge: 10px, Shift 50px, Alt 1px
+    e.preventDefault();
+    const step = e.shiftKey ? 50 : e.altKey ? 1 : 10;
+    const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+    const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+    for (const id of ids) {
+      const it = S.items.get(id);
+      it.x = clamp(it.x + dx, -it.w / 2, WORLD_W - it.w / 2);
+      it.y = clamp(it.y + dy, -it.h / 4, WORLD_H - it.h / 2);
+      renderItem(it); commit(it, { delay: 350 });
+    }
+    renderStrings(); positionSelbar();
+  } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+    e.preventDefault(); selectItems([...S.items.keys()]);
+  } else if (e.key.toLowerCase() === 'v' && !e.ctrlKey && !e.metaKey) setTool('select');
+  else if (e.key.toLowerCase() === 'h' && !e.ctrlKey && !e.metaKey) setTool('pan');
   else if (e.key === 'Enter' && S.sel?.type === 'item') {
     e.preventDefault();
     const it = S.items.get(S.sel.id);
@@ -724,6 +896,7 @@ document.addEventListener('keydown', e => {
 /* ---------- toolbar ---------- */
 $('#toolbar').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.tool) return setTool(S.tool === 'select' ? 'pan' : 'select');
   if (b.dataset.add === 'photo') return pickPhoto(null);
   if (b.dataset.add) {
     endEdit();
@@ -741,6 +914,13 @@ $('#toolbar').addEventListener('click', e => {
   if (b.dataset.zoom === 'out') zoomAt(r.left + r.width / 2, r.top + r.height / 2, S.view.s / 1.25);
   if (b.dataset.zoom === 'fit') fitView();
 });
+function setTool(tool) {
+  S.tool = tool;
+  const b = $('#toolbar [data-tool]');
+  b.classList.toggle('on', tool === 'select');
+  b.title = tool === 'select' ? 'Select tool is on: drag on the cork to box-select (V). Click again to go back to panning (H).' : 'Select tool: drag on the cork to box-select several items (V)';
+  viewport.classList.toggle('selecting', tool === 'select');
+}
 function renderYarnPicker() {
   $('#yarnColors').innerHTML = YARN_COLORS.map(c => swatch(c, c === S.yarnColor, 'data-yarn')).join('');
 }
@@ -822,12 +1002,12 @@ function sanitizeItem(raw) {
 function onRemoteItem({ item, live, by }) {
   const it = sanitizeItem(item); if (!it) return;
   const d = S.drag;
-  if (d && d.id === it.id && (d.type === 'move' || d.type === 'resize')) return;   // I'm holding it
+  if (d && (d.type === 'move' || d.type === 'resize') && (d.ids || [d.id]).includes(it.id)) return;   // I'm holding it
   const cur = S.items.get(it.id);
   if (cur && S.editing?.id === it.id) it[S.editing.field] = cur[S.editing.field];
   S.items.set(it.id, it);
   renderItem(it); schedule(null);
-  if (S.sel?.id === it.id) renderSelbar();
+  if (S.sel?.id === it.id) renderSelbar(); else if (S.multi.has(it.id)) positionSelbar();
   if (live) markHeld(it.id, by);
 }
 function onRemoteItemDel({ id }) {
@@ -837,6 +1017,7 @@ function onRemoteItemDel({ id }) {
   for (const [sid, s] of S.strings) if (s.from_item === id || s.to_item === id) S.strings.delete(sid);
   removeItemEl(id);
   if (S.sel?.id === id) select(null);
+  if (S.multi.delete(id)) selectItems([...S.multi]);
   renderStrings();
 }
 function onRemoteString({ string: s }) {
@@ -859,12 +1040,12 @@ async function loadBoard() {
   const titleEl = $('#boardTitle');
   if (document.activeElement !== titleEl) titleEl.value = S.board.title;
   document.title = S.board.title + ' · Pinboard';
-  const keepId = S.drag?.id || S.editing?.id;
+  const keep = new Set([...(S.drag?.ids || []), S.drag?.id, S.editing?.id].filter(Boolean));
   const items = new Map();
   for (const raw of data.items || []) {
     const it = sanitizeItem(raw); if (!it) continue;
     // keep my local copy if I'm holding it or have an unsaved write for it in flight
-    const mine = it.id === keepId || saveTimers.has(it.id) || chains.has(it.id);
+    const mine = keep.has(it.id) || saveTimers.has(it.id) || chains.has(it.id);
     items.set(it.id, mine && S.items.has(it.id) ? S.items.get(it.id) : it);
   }
   for (const [id, it] of S.items) if (!items.has(id) && (saveTimers.has(id) || chains.has(id))) items.set(id, it);

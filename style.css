@@ -67,7 +67,8 @@ button{font:inherit;cursor:pointer}
 #items,#pins,#cursors{position:absolute;inset:0}
 #items{z-index:1}#yarn{z-index:2}#pins{z-index:3}#cursors{z-index:4}
 #yarn{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
-#cursors{pointer-events:none}
+#cursors,#pins{pointer-events:none}
+.pin{pointer-events:auto}
 
 /* ---------- items ---------- */
 .item{position:absolute;transform-origin:50% 50%;cursor:move;touch-action:none}
@@ -230,3 +231,13 @@ button{font:inherit;cursor:pointer}
   .tb-label{align-self:center}
   #hint{display:none}
 }
+
+/* ---------- relocation: multi-select, box select, yarn re-tie ---------- */
+#viewport.selecting{cursor:crosshair}
+#marquee{position:absolute;z-index:6;pointer-events:none;border:1.5px dashed #fff;background:rgba(255,255,255,.12);border-radius:2px}
+.y-end{fill:#fff;stroke:rgba(0,0,0,.55);pointer-events:all;cursor:grab}
+.y-end:hover{fill:#ffe08a}
+#toolbar button.on{background:#5a4a3c;box-shadow:inset 0 0 0 1px #c9a77a}
+.ico-select{width:26px;height:22px;border:2px dashed #e8dccb;border-radius:3px;position:relative;margin:2px 0}
+.ico-select::after{content:'';position:absolute;right:-7px;bottom:-8px;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid #fff;transform:rotate(-35deg)}
+#selbar .count{font-size:13px;padding:0 4px;color:#d9cdbf;white-space:nowrap}

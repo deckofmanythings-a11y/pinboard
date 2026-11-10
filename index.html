@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Special+Elite&family=Permanent+Marker&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=1">
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 
@@ -32,6 +32,8 @@
 </div>
 
 <nav id="toolbar" hidden>
+  <button data-tool="select" title="Select tool: drag on the cork to box-select several items (V)"><span class="ico ico-select"></span><span>Select</span></button>
+  <div class="tb-sep"></div>
   <button data-add="postit" title="Post-it note"><span class="ico ico-postit"></span><span>Post-it</span></button>
   <button data-add="card" title="Index card"><span class="ico ico-card"></span><span>Card</span></button>
   <button data-add="photo" title="Upload a photo (or drop / paste one)"><span class="ico ico-photo"></span><span>Photo</span></button>
@@ -45,7 +47,7 @@
   <button data-zoom="fit" title="Fit everything">⤢</button>
 </nav>
 
-<div id="hint" hidden>Drag a <b>pin</b> onto another note to tie yarn · double-click to write · drop or paste photos</div>
+<div id="hint" hidden>Drag a <b>pin</b> onto another note to tie yarn · <b>Shift</b>+drag to select several · arrow keys nudge · double-click to write</div>
 
 <div id="selbar" hidden></div>
 <div id="toast"></div>
@@ -88,6 +90,6 @@
 <input id="filePick" type="file" accept="image/*" multiple hidden>
 
 <script src="sb-client.bundle.js"></script>
-<script src="app.js?v=1"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>
