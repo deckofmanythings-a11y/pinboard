@@ -125,15 +125,20 @@ button{font:inherit;cursor:pointer}
 .item.sel .rs{display:block}
 
 /* ---------- push pins ---------- */
-.pin{position:absolute;width:24px;height:24px;margin:-12px 0 0 -12px;cursor:crosshair;touch-action:none}
-.pin::before{content:'';position:absolute;left:15px;top:15px;width:15px;height:4px;border-radius:3px;
-  background:rgba(0,0,0,.4);filter:blur(1.5px);transform:rotate(38deg);transform-origin:0 50%}
-.pin::after{content:'';position:absolute;inset:0;border-radius:50%;
-  background:
-    radial-gradient(circle at 34% 30%,rgba(255,255,255,.95) 0 9%,rgba(255,255,255,0) 26%),
-    radial-gradient(circle at 50% 50%,var(--pc) 0 52%,color-mix(in srgb,var(--pc) 55%,#000) 100%);
-  box-shadow:3px 5px 5px rgba(0,0,0,.45),inset -2px -3px 4px rgba(0,0,0,.35)}
-.pin:hover::after{box-shadow:0 0 0 3px rgba(255,255,255,.6),3px 5px 5px rgba(0,0,0,.45),inset -2px -3px 4px rgba(0,0,0,.35)}
+/* .pin is a 0x0 anchor at the needle point; the SVG draws outside it and only painted parts take clicks */
+.pin{position:absolute;width:0;height:0;pointer-events:none!important;cursor:crosshair;touch-action:none}
+.pin-svg{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.pin-body{pointer-events:visiblePainted;filter:drop-shadow(0 0 .4px rgba(0,0,0,.6))}
+.pin-body .pc{fill:var(--pc);fill-opacity:.94}
+.pin-body .spec{fill:#fff;opacity:.75}
+.pin-shadow{fill:#000;opacity:.4;pointer-events:none}
+.pin:hover .pin-body{filter:drop-shadow(0 0 2px rgba(255,255,255,.95))}
+
+/* pinholes left in the cork */
+#holes{position:absolute;inset:0;z-index:0;pointer-events:none}
+.hole{position:absolute;width:6px;height:5px;margin:-2.5px 0 0 -3px;border-radius:50% 45% 55% 50%;
+  background:radial-gradient(circle at 45% 45%,#140b04 0 38%,#3a2210 60%,rgba(60,35,15,0) 100%);
+  box-shadow:0 0 0 1.2px rgba(70,40,15,.35),.6px .8px 0 1px rgba(255,225,180,.18)}
 
 /* ---------- yarn ---------- */
 .y-shadow{fill:none;stroke:rgba(0,0,0,.4);stroke-width:5;stroke-linecap:round;filter:blur(2px)}

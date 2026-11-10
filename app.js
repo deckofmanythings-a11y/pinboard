@@ -184,6 +184,7 @@ function renderItem(it) {
     pin = document.createElement('div');
     pin.className = 'pin'; pin.id = 'pin-' + it.id; pin.dataset.id = it.id;
     pin.title = 'Drag onto another note to tie yarn';
+    pin.innerHTML = pinSvg(it.id);
     pinsEl.appendChild(pin);
   }
   const p = pinPos(it);
@@ -191,6 +192,68 @@ function renderItem(it) {
   pin.style.zIndex = it.z || 0;
   pin.style.setProperty('--pc', safeColor(it.pin_color, PIN_COLORS[0]));
 }
+/* Tall push pin seen slightly off top-down: the needle point sits at (0,0) in the cork and the
+   pin leans toward the viewer, so you mostly see the round head with a glimpse of the waisted
+   barrel and collar below it. Lean varies a little per pin so a board of them looks hand-placed. */
+const ring = (rx, ry, y0, y1) => `M${-rx},${y0} A${rx},${ry} 0 0 0 ${rx},${y0} L${rx},${y1} A${rx},${ry} 0 0 1 ${-rx},${y1} Z`;
+const PIN_BARREL = 'M-6.5,-5 C-4,-8 -3,-11 -3,-14 C-3,-17 -4.5,-19.5 -6,-21 L6,-21 C4.5,-19.5 3,-17 3,-14 C3,-11 4,-8 6.5,-5 Z';
+function pinSvg(id) {
+  let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) | 0;
+  const lean = -30 + (Math.abs(h) % 13) - 6;
+  // wide flange against the cork, waisted barrel, smaller grip end toward the viewer
+  return `<svg class="pin-svg" width="1" height="1">` +
+    `<g class="pin-shadow" filter="url(#pbBlur)" transform="rotate(140) scale(.8,.62)"><path d="${PIN_BARREL}"/><ellipse cy="-22.5" rx="6.8" ry="5.2"/></g>` +
+    `<g class="pin-body" transform="rotate(${lean})">` +
+      `<path class="pc" d="${ring(9.5, 7.2, -2, -4.6)}"/><path fill="url(#pbShade)" d="${ring(9.5, 7.2, -2, -4.6)}"/>` +
+      `<ellipse class="pc" cy="-4.6" rx="9.5" ry="7.2"/><ellipse fill="url(#pbTop)" cy="-4.6" rx="9.5" ry="7.2"/>` +
+      `<path class="pc" d="${PIN_BARREL}"/><path fill="url(#pbShade)" d="${PIN_BARREL}"/>` +
+      `<path class="pc" d="${ring(6.8, 5.2, -21, -24)}"/><path fill="url(#pbShade)" d="${ring(6.8, 5.2, -21, -24)}"/>` +
+      `<ellipse class="pc" cy="-24" rx="6.8" ry="5.2"/><ellipse fill="url(#pbTop)" cy="-24" rx="6.8" ry="5.2"/>` +
+      `<ellipse class="spec" cx="-2.6" cy="-26.2" rx="2" ry="1.3" transform="rotate(-20 -2.6 -26.2)"/>` +
+    `</g></svg>`;
+}
+
+/* ---------- pinholes: pulling a pin out leaves a hole in the cork ---------- */
+const holesEl = document.createElement('div');
+holesEl.id = 'holes';
+world.insertBefore(holesEl, itemsEl);
+S.holes = [];
+function drawHole(h) {
+  const d = document.createElement('i');
+  d.className = 'hole';
+  d.style.left = h[0] + 'px'; d.style.top = h[1] + 'px';
+  d.style.transform = `rotate(${(h[0] * 37 + h[1] * 11) % 360}deg) scale(${0.8 + ((h[0] + h[1]) % 7) / 20})`;
+  holesEl.appendChild(d);
+}
+function renderHoles() { holesEl.textContent = ''; S.holes.forEach(drawHole); }
+function addHole(p, remote = false) {
+  if (!p || !isFinite(p.x) || !isFinite(p.y)) return;
+  const h = [Math.round(p.x), Math.round(p.y)];
+  if (S.holes.some(o => Math.abs(o[0] - h[0]) < 3 && Math.abs(o[1] - h[1]) < 3)) return;   // re-pinned into the same hole
+  S.holes.push(h);
+  if (S.holes.length > 600) { S.holes.shift(); holesEl.firstChild?.remove(); }
+  drawHole(h);
+  if (!remote) {
+    bcast('hole', { h });
+    sb.rpc('pb_add_hole', { p_board: boardId, p_x: h[0], p_y: h[1] }).then(({ error }) => error && console.warn('hole', error));
+  }
+}
+/* Where each pin last came to rest. A local move that settles somewhere new leaves a hole at
+   the old spot (rotate/resize don't: you'd turn a note on its pin, not re-pin it). */
+const rest = new Map(), holeTimers = new Map();
+function setRest(it) { rest.set(it.id, { x: it.x, y: it.y, p: pinPos(it) }); }
+function settlePin(it) {
+  clearTimeout(holeTimers.get(it.id));
+  holeTimers.set(it.id, setTimeout(() => {
+    holeTimers.delete(it.id);
+    const cur = S.items.get(it.id); if (!cur) return;
+    if (S.drag?.ids?.includes(cur.id)) return;   // still held; the drop commits again
+    const r = rest.get(cur.id);
+    if (r && Math.hypot(cur.x - r.x, cur.y - r.y) > 4) addHole(r.p);
+    setRest(cur);
+  }, 400));
+}
+
 function removeItemEl(id) {
   document.getElementById('it-' + id)?.remove();
   document.getElementById('pin-' + id)?.remove();
@@ -295,7 +358,7 @@ function persistItem(it, delay = 0) {
 /** Commit a local change: tell peers now, save to DB (debounced when delay>0). */
 function commit(it, { live = false, delay = 0 } = {}) {
   bcast('item', { item: wire(it), live });
-  if (!live) persistItem(it, delay);
+  if (!live) { persistItem(it, delay); settlePin(it); }
 }
 const liveThrottle = new Map();
 function commitLive(it) {
@@ -338,7 +401,10 @@ function freeSpotNear(p) {
   return p;
 }
 function deleteItem(id) {
-  if (!S.items.has(id)) return;
+  const gone = S.items.get(id); if (!gone) return;
+  clearTimeout(holeTimers.get(id)); holeTimers.delete(id);
+  addHole(rest.get(id)?.p || pinPos(gone));   // the pin comes out with the note
+  rest.delete(id);
   S.items.delete(id);
   for (const [sid, s] of S.strings) if (s.from_item === id || s.to_item === id) S.strings.delete(sid);
   removeItemEl(id);
@@ -1006,6 +1072,7 @@ function onRemoteItem({ item, live, by }) {
   const cur = S.items.get(it.id);
   if (cur && S.editing?.id === it.id) it[S.editing.field] = cur[S.editing.field];
   S.items.set(it.id, it);
+  if (!live) setRest(it);   // the mover sends the hole for where it used to be
   renderItem(it); schedule(null);
   if (S.sel?.id === it.id) renderSelbar(); else if (S.multi.has(it.id)) positionSelbar();
   if (live) markHeld(it.id, by);
@@ -1013,7 +1080,7 @@ function onRemoteItem({ item, live, by }) {
 function onRemoteItemDel({ id }) {
   if (!S.items.has(id)) return;
   if (S.editing?.id === id) { S.editing = null; }
-  S.items.delete(id);
+  S.items.delete(id); rest.delete(id);
   for (const [sid, s] of S.strings) if (s.from_item === id || s.to_item === id) S.strings.delete(sid);
   removeItemEl(id);
   if (S.sel?.id === id) select(null);
@@ -1050,6 +1117,12 @@ async function loadBoard() {
   }
   for (const [id, it] of S.items) if (!items.has(id) && (saveTimers.has(id) || chains.has(id))) items.set(id, it);
   S.items = items;
+  for (const it of items.values()) if (!holeTimers.has(it.id)) setRest(it);
+  const holes = (Array.isArray(data.board.holes) ? data.board.holes : [])
+    .filter(h => Array.isArray(h) && isFinite(h[0]) && isFinite(h[1])).map(h => [+h[0], +h[1]]);
+  for (const h of S.holes) if (!holes.some(o => Math.abs(o[0] - h[0]) < 3 && Math.abs(o[1] - h[1]) < 3)) holes.push(h);
+  S.holes = holes.slice(-600);
+  renderHoles();
   const strings = new Map((data.strings || []).map(s => [s.id, { id: s.id, from_item: s.from_item, to_item: s.to_item, color: safeColor(s.color, YARN_COLORS[0]) }]));
   for (const [id, s] of S.strings) if (chains.has(id)) { if (strings.has(id) || S.strings.has(id)) strings.set(id, s); }
   for (const id of [...strings.keys()]) if (chains.has(id) && !S.strings.has(id)) strings.delete(id);   // pending local cut
@@ -1069,6 +1142,7 @@ function connect() {
     .on('broadcast', { event: 'item_del' }, ({ payload }) => onRemoteItemDel(payload))
     .on('broadcast', { event: 'string' }, ({ payload }) => onRemoteString(payload))
     .on('broadcast', { event: 'string_del' }, ({ payload }) => onRemoteStringDel(payload))
+    .on('broadcast', { event: 'hole' }, ({ payload }) => Array.isArray(payload.h) && addHole({ x: +payload.h[0], y: +payload.h[1] }, true))
     .on('broadcast', { event: 'cursor' }, ({ payload }) => updateCursor(payload))
     .on('broadcast', { event: 'board' }, ({ payload }) => {
       if (!S.board || typeof payload.title !== 'string') return;
