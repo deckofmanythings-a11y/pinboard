@@ -246,3 +246,16 @@ button{font:inherit;cursor:pointer}
 .ico-select{width:26px;height:22px;border:2px dashed #e8dccb;border-radius:3px;position:relative;margin:2px 0}
 .ico-select::after{content:'';position:absolute;right:-7px;bottom:-8px;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid #fff;transform:rotate(-35deg)}
 #selbar .count{font-size:13px;padding:0 4px;color:#d9cdbf;white-space:nowrap}
+
+/* pin style choice (toolbar = style for new notes, selbar = this note's pin) */
+button.pstyle{display:grid;place-items:center;width:30px;height:32px;padding:0;border-radius:7px;background:transparent;
+  border:1px solid transparent;cursor:pointer}
+#toolbar button.pstyle{width:30px;padding:0}
+button.pstyle:hover{background:#3a322c}
+button.pstyle.on{background:#5a4a3c;border-color:#c9a77a}
+.pin-ico{width:26px;height:28px;overflow:visible;pointer-events:none}
+.pin-ico .pin-body{pointer-events:none;filter:none}
+.pin-ico .pc{fill:var(--pc)}
+.pin-ico .spec{fill:#fff;opacity:.75}
+.pin-ico .pin-shadow{fill:#000;opacity:.45}
+#pinStyles{gap:2px;flex-wrap:nowrap}

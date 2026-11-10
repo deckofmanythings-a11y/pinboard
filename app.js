@@ -59,6 +59,7 @@ const S = {
   editing: null,      // {id, field, el}
   drag: null,
   yarnColor: store.get('pb_yarn', YARN_COLORS[0]),
+  pinStyle: store.get('pb_pinstyle', 'tall') === 'round' ? 'round' : 'tall',   // style for new pins
   lastPostit: POSTIT_COLORS[0],
   channel: null,
   loaded: false,
@@ -184,9 +185,9 @@ function renderItem(it) {
     pin = document.createElement('div');
     pin.className = 'pin'; pin.id = 'pin-' + it.id; pin.dataset.id = it.id;
     pin.title = 'Drag onto another note to tie yarn';
-    pin.innerHTML = pinSvg(it.id);
     pinsEl.appendChild(pin);
   }
+  if (pin.dataset.style !== pinStyleOf(it)) { pin.dataset.style = pinStyleOf(it); pin.innerHTML = pinSvg(it.id, pin.dataset.style); }
   const p = pinPos(it);
   pin.style.left = p.x + 'px'; pin.style.top = p.y + 'px';
   pin.style.zIndex = it.z || 0;
@@ -197,12 +198,18 @@ function renderItem(it) {
    barrel and collar below it. Lean varies a little per pin so a board of them looks hand-placed. */
 const ring = (rx, ry, y0, y1) => `M${-rx},${y0} A${rx},${ry} 0 0 0 ${rx},${y0} L${rx},${y1} A${rx},${ry} 0 0 1 ${-rx},${y1} Z`;
 const PIN_BARREL = 'M-6.5,-5 C-4,-8 -3,-11 -3,-14 C-3,-17 -4.5,-19.5 -6,-21 L6,-21 C4.5,-19.5 3,-17 3,-14 C3,-11 4,-8 6.5,-5 Z';
-function pinSvg(id) {
-  let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) | 0;
-  const lean = -30 + (Math.abs(h) % 13) - 6;
-  // wide flange against the cork, waisted barrel, smaller grip end toward the viewer
-  return `<svg class="pin-svg" width="1" height="1">` +
-    `<g class="pin-shadow" filter="url(#pbBlur)" transform="rotate(140) scale(.8,.62)"><path d="${PIN_BARREL}"/><ellipse cy="-22.5" rx="6.8" ry="5.2"/></g>` +
+const PIN_STYLES = ['tall', 'round'];
+const pinStyleOf = it => it.pin_style === 'round' ? 'round' : 'tall';
+function pinShapes(style, lean) {
+  if (style === 'round')   // dome-head map pin seen from just off top-down
+    return `<g class="pin-shadow" filter="url(#pbBlur)"><ellipse cx="5" cy="5" rx="9.5" ry="7.5"/></g>` +
+      `<g class="pin-body" transform="rotate(${lean})">` +
+        `<circle class="pc" cy="-3.5" r="10"/><circle fill="url(#pbTop)" cy="-3.5" r="10"/>` +
+        `<circle cy="-3.5" r="9.6" fill="none" stroke="rgba(0,0,0,.3)" stroke-width=".8"/>` +
+        `<ellipse class="spec" cx="-3.4" cy="-7.4" rx="3.2" ry="2" transform="rotate(-25 -3.4 -7.4)"/>` +
+      `</g>`;
+  // tall: wide flange against the cork, waisted barrel, smaller grip end toward the viewer
+  return `<g class="pin-shadow" filter="url(#pbBlur)" transform="rotate(140) scale(.8,.62)"><path d="${PIN_BARREL}"/><ellipse cy="-22.5" rx="6.8" ry="5.2"/></g>` +
     `<g class="pin-body" transform="rotate(${lean})">` +
       `<path class="pc" d="${ring(9.5, 7.2, -2, -4.6)}"/><path fill="url(#pbShade)" d="${ring(9.5, 7.2, -2, -4.6)}"/>` +
       `<ellipse class="pc" cy="-4.6" rx="9.5" ry="7.2"/><ellipse fill="url(#pbTop)" cy="-4.6" rx="9.5" ry="7.2"/>` +
@@ -210,8 +217,15 @@ function pinSvg(id) {
       `<path class="pc" d="${ring(6.8, 5.2, -21, -24)}"/><path fill="url(#pbShade)" d="${ring(6.8, 5.2, -21, -24)}"/>` +
       `<ellipse class="pc" cy="-24" rx="6.8" ry="5.2"/><ellipse fill="url(#pbTop)" cy="-24" rx="6.8" ry="5.2"/>` +
       `<ellipse class="spec" cx="-2.6" cy="-26.2" rx="2" ry="1.3" transform="rotate(-20 -2.6 -26.2)"/>` +
-    `</g></svg>`;
+    `</g>`;
 }
+function pinSvg(id, style) {
+  let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) | 0;
+  const lean = -30 + (Math.abs(h) % 13) - 6;   // each pin leans a little differently
+  return `<svg class="pin-svg" width="1" height="1">${pinShapes(style, lean)}</svg>`;
+}
+const pinIcon = (style, color) =>
+  `<svg class="pin-ico" viewBox="-17 -27 32 34" style="--pc:${color}">${pinShapes(style, -28)}</svg>`;
 
 /* ---------- pinholes: pulling a pin out leaves a hole in the cork ---------- */
 const holesEl = document.createElement('div');
@@ -325,7 +339,7 @@ function renderAll() {
 }
 
 /* ---------- persistence + broadcast ---------- */
-const FIELDS = ['id', 'kind', 'x', 'y', 'w', 'h', 'rot', 'z', 'color', 'pin_color', 'title', 'body', 'image_path', 'created_by'];
+const FIELDS = ['id', 'kind', 'x', 'y', 'w', 'h', 'rot', 'z', 'color', 'pin_color', 'pin_style', 'title', 'body', 'image_path', 'created_by'];
 function wire(it) { const o = {}; for (const f of FIELDS) o[f] = it[f] ?? null; return o; }
 function bcast(event, payload) {
   if (!S.channel) return;
@@ -376,7 +390,7 @@ function addItem(kind, at, extra = {}) {
     rot: Math.round((Math.random() * 8 - 4) * 10) / 10,
     z: maxZ() + 1,
     color: kind === 'postit' ? S.lastPostit : kind === 'card' ? CARD_COLORS[0] : null,
-    pin_color: PIN_COLORS[Math.floor(Math.random() * 3)],
+    pin_color: PIN_COLORS[Math.floor(Math.random() * 3)], pin_style: S.pinStyle,
     title: '', body: '', image_path: null, created_by: me.name,
     ...extra,
   };
@@ -558,13 +572,15 @@ function select(sel) {
 function swatch(color, on, attr, sq) {
   return `<button type="button" class="sw${on ? ' on' : ''}${sq ? ' sq' : ''}" style="background:${color}" ${attr}="${color}" title="${color}"></button>`;
 }
+const pinStyleBtns = (cur, color) => `<div class="grp">${PIN_STYLES.map(st => `<button type="button" class="pstyle${st === cur ? ' on' : ''}" data-pinstyle="${st}" title="${st === 'tall' ? 'Tall push pin' : 'Round pin'}">${pinIcon(st, color)}</button>`).join('')}</div>`;
 function renderSelbar() {
   const bar = $('#selbar');
   const sel = S.sel;
   if (S.multi.size) {
     bar.innerHTML = `<span class="count">${S.multi.size} items</span><div class="div"></div>` +
       `<button class="ic" data-act="mrotl" title="Rotate each left">↺</button><button class="ic" data-act="mrotr" title="Rotate each right">↻</button>` +
-      `<button class="ic" data-act="mback" title="Send to back">⤓</button>` +
+      `<button class="ic" data-act="mback" title="Send to back">⤓</button><div class="div"></div>` +
+      pinStyleBtns(null, '#c9a77a') + `<div class="div"></div>` +
       `<button class="ic danger" data-act="mdel" title="Delete all (Del)">🗑</button>`;
     bar.hidden = false; positionSelbar(); return;
   }
@@ -582,7 +598,8 @@ function renderSelbar() {
       h += `<button class="ic" data-act="photo" title="${it.kind === 'photo' ? 'Replace photo' : 'Add the photo'}">📷 ${it.kind === 'photo' ? 'Replace' : 'Add photo'}</button><div class="div"></div>`;
     if (it.kind === 'photo')
       h += `<button class="ic" data-act="unphoto" title="Turn back into a placeholder">⬚</button><div class="div"></div>`;
-    h += `<div class="grp">${PIN_COLORS.map(c => swatch(c, c === it.pin_color, 'data-pin')).join('')}</div><div class="div"></div>`;
+    h += `<div class="grp">${PIN_COLORS.map(c => swatch(c, c === it.pin_color, 'data-pin')).join('')}</div>`;
+    h += pinStyleBtns(pinStyleOf(it), safeColor(it.pin_color, PIN_COLORS[0])) + `<div class="div"></div>`;
     h += `<button class="ic" data-act="rotl" title="Rotate left">↺</button><button class="ic" data-act="rotr" title="Rotate right">↻</button>`;
     h += `<button class="ic" data-act="back" title="Send to back">⤓</button>`;
     h += `<button class="ic danger" data-act="del" title="Delete (Del)">🗑</button>`;
@@ -628,6 +645,7 @@ $('#selbar').addEventListener('click', e => {
       if (b.dataset.act === 'mrotl') it.rot = Math.round(((it.rot || 0) - 4) * 10) / 10;
       else if (b.dataset.act === 'mrotr') it.rot = Math.round(((it.rot || 0) + 4) * 10) / 10;
       else if (b.dataset.act === 'mback') it.z = --mn;
+      else if (b.dataset.pinstyle) it.pin_style = b.dataset.pinstyle;
       else return;
       renderItem(it); commit(it);
     }
@@ -643,6 +661,7 @@ $('#selbar').addEventListener('click', e => {
   const it = S.items.get(S.sel.id); if (!it) return;
   if (b.dataset.color) { it.color = b.dataset.color; if (it.kind === 'postit') S.lastPostit = it.color; }
   else if (b.dataset.pin) it.pin_color = b.dataset.pin;
+  else if (b.dataset.pinstyle) it.pin_style = b.dataset.pinstyle;
   else switch (b.dataset.act) {
     case 'rotl': it.rot = Math.round(((it.rot || 0) - 4) * 10) / 10; break;
     case 'rotr': it.rot = Math.round(((it.rot || 0) + 4) * 10) / 10; break;
@@ -970,6 +989,10 @@ $('#toolbar').addEventListener('click', e => {
     startEdit(it.id, it.kind === 'card' || it.kind === 'placeholder' ? 'title' : 'body');
     return;
   }
+  if (b.dataset.newpin) {
+    S.pinStyle = b.dataset.newpin; store.set('pb_pinstyle', S.pinStyle); renderPinStylePicker();
+    return;
+  }
   if (b.dataset.yarn) {
     S.yarnColor = b.dataset.yarn; store.set('pb_yarn', S.yarnColor); renderYarnPicker();
     if (S.sel?.type === 'string') recolorString(S.sel.id, S.yarnColor);
@@ -986,6 +1009,10 @@ function setTool(tool) {
   b.classList.toggle('on', tool === 'select');
   b.title = tool === 'select' ? 'Select tool is on: drag on the cork to box-select (V). Click again to go back to panning (H).' : 'Select tool: drag on the cork to box-select several items (V)';
   viewport.classList.toggle('selecting', tool === 'select');
+}
+function renderPinStylePicker() {
+  $('#pinStyles').innerHTML = PIN_STYLES.map(st =>
+    `<button type="button" class="pstyle${st === S.pinStyle ? ' on' : ''}" data-newpin="${st}" title="New notes get a ${st === 'tall' ? 'tall push pin' : 'round pin'}">${pinIcon(st, PIN_COLORS[0])}</button>`).join('');
 }
 function renderYarnPicker() {
   $('#yarnColors').innerHTML = YARN_COLORS.map(c => swatch(c, c === S.yarnColor, 'data-yarn')).join('');
@@ -1060,6 +1087,7 @@ function sanitizeItem(raw) {
     x: num(raw.x, 0), y: num(raw.y, 0), w: clamp(num(raw.w, 200), 60, 2000), h: clamp(num(raw.h, 200), 60, 2000),
     rot: clamp(num(raw.rot, 0), -360, 360), z: Math.round(num(raw.z, 0)),
     color: isColor(raw.color) ? raw.color : null, pin_color: isColor(raw.pin_color) ? raw.pin_color : null,
+    pin_style: PIN_STYLES.includes(raw.pin_style) ? raw.pin_style : null,
     title: raw.title == null ? '' : String(raw.title), body: raw.body == null ? '' : String(raw.body),
     image_path: typeof raw.image_path === 'string' && raw.image_path.startsWith(boardId + '/') ? raw.image_path : null,
     created_by: raw.created_by ? String(raw.created_by) : null,
@@ -1250,7 +1278,7 @@ function showLanding() {
 
 /* ---------- boot ---------- */
 async function boot() {
-  renderYarnPicker();
+  renderYarnPicker(); renderPinStylePicker();
   applyView();
   addEventListener('resize', positionSelbar);
   if (!boardId) { showLanding(); return; }
