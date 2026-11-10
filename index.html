@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Pinboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Special+Elite&family=Permanent+Marker&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+
+<header id="topbar">
+  <div class="brand"><span class="brand-pin"></span>Pinboard</div>
+  <input id="boardTitle" maxlength="120" spellcheck="false" aria-label="Board title" hidden>
+  <div class="spacer"></div>
+  <div id="peers" aria-label="People on this board"></div>
+  <span id="conn" class="conn" title="Connecting…"></span>
+  <button id="meChip" class="me-chip" hidden></button>
+  <button id="shareBtn" class="btn" hidden>Share link</button>
+</header>
+
+<div id="viewport">
+  <div id="world">
+    <div id="cork"></div>
+    <div id="items"></div>
+    <svg id="yarn" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div id="pins"></div>
+    <div id="cursors"></div>
+  </div>
+</div>
+
+<nav id="toolbar" hidden>
+  <button data-add="postit" title="Post-it note"><span class="ico ico-postit"></span><span>Post-it</span></button>
+  <button data-add="card" title="Index card"><span class="ico ico-card"></span><span>Card</span></button>
+  <button data-add="photo" title="Upload a photo (or drop / paste one)"><span class="ico ico-photo"></span><span>Photo</span></button>
+  <button data-add="placeholder" title="Placeholder for a photo you don't have yet"><span class="ico ico-ph"></span><span>Need photo</span></button>
+  <div class="tb-sep"></div>
+  <div class="tb-label">Yarn</div>
+  <div id="yarnColors" class="swatches vert"></div>
+  <div class="tb-sep"></div>
+  <button data-zoom="in" title="Zoom in">＋</button>
+  <button data-zoom="out" title="Zoom out">－</button>
+  <button data-zoom="fit" title="Fit everything">⤢</button>
+</nav>
+
+<div id="hint" hidden>Drag a <b>pin</b> onto another note to tie yarn · double-click to write · drop or paste photos</div>
+
+<div id="selbar" hidden></div>
+<div id="toast"></div>
+
+<!-- Landing: no board in URL -->
+<div id="landing" class="overlay" hidden>
+  <div class="index-card big">
+    <h1>Pinboard</h1>
+    <p class="sub">A shared corkboard — pins, yarn, photos and notes, live with everyone who has the link.</p>
+    <form id="newBoardForm">
+      <label>Name your board<input id="newBoardTitle" maxlength="120" placeholder="The Case of the Missing Llama" autocomplete="off"></label>
+      <button class="btn primary" type="submit">Start a new board</button>
+    </form>
+    <div id="recentWrap" hidden>
+      <h2>Your recent boards</h2>
+      <ul id="recent"></ul>
+    </div>
+  </div>
+</div>
+
+<!-- Name prompt -->
+<div id="nameModal" class="overlay" hidden>
+  <form id="nameForm" class="index-card">
+    <h2>Who's pinning?</h2>
+    <label>Your name<input id="nameInput" maxlength="40" required autocomplete="nickname"></label>
+    <div class="lbl">Your colour</div>
+    <div id="meColors" class="swatches"></div>
+    <button class="btn primary" type="submit">Join board</button>
+  </form>
+</div>
+
+<div id="notFound" class="overlay" hidden>
+  <div class="index-card">
+    <h2>Board not found</h2>
+    <p>That link doesn't match any board. It may have a typo.</p>
+    <a class="btn primary" href="./">Start a new board</a>
+  </div>
+</div>
+
+<input id="filePick" type="file" accept="image/*" multiple hidden>
+
+<script src="sb-client.bundle.js"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>
