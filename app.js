@@ -309,7 +309,12 @@ function alongYarn(p, q, len) {
 }
 function yarnGroup(id, a, b, color, sel, temp) {
   const d = yarnD(a, b);
-  const sd = yarnD({ x: a.x + 4, y: a.y + 7 }, { x: b.x + 4, y: b.y + 7 }, Math.min(70, 8 + Math.hypot(b.x - a.x, b.y - a.y) * 0.09) + 6);
+  // Shadow shares the strand's end points (pinned flat at each pin) and only its curve is pushed
+  // down-right, so it drifts out toward the middle as if the yarn had a little height. A quadratic's
+  // midpoint moves half as far as its control point, so mid-strand it's offset ~yarn-width and still touches.
+  const dist = Math.hypot(b.x - a.x, b.y - a.y);
+  const drop = Math.min(70, 8 + dist * 0.09), lift = Math.min(4, 1 + dist * 0.006) * 2;
+  const sd = `M${a.x.toFixed(1)},${a.y.toFixed(1)} Q${((a.x + b.x) / 2 + lift * 0.4).toFixed(1)},${((a.y + b.y) / 2 + drop + lift * 0.92).toFixed(1)} ${b.x.toFixed(1)},${b.y.toFixed(1)}`;
   return `<g class="yarn${sel ? ' sel' : ''}${temp ? ' temp' : ''}" data-sid="${id}">` +
     `<path class="y-shadow" d="${sd}"/><path class="y-main" d="${d}" stroke="${color}"/>` +
     `<path class="y-fiber" d="${d}"/><path class="y-fiber2" d="${d}"/>` +
